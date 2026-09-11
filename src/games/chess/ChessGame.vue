@@ -6,6 +6,8 @@ const board = ref(makeBoard());
 const turn = ref("white");
 const selected = ref(null);
 const winner = ref(null);
+const lastMove = ref(null);
+const moveToken = ref(0);
 
 function makeBoard() {
   const next = Array.from({ length: 8 }, () => Array(8).fill(null));
@@ -40,16 +42,19 @@ function movesFrom(from) {
 }
 
 const possible = computed(() => selected.value ? movesFrom(selected.value).map(([row, col]) => `${row}:${col}`) : []);
-function reset() { board.value = makeBoard(); turn.value = "white"; selected.value = null; winner.value = null; }
+function reset() { board.value = makeBoard(); turn.value = "white"; selected.value = null; winner.value = null; lastMove.value = null; moveToken.value += 1; }
 function clickCell(row, col) {
   if (winner.value) return;
   const piece = board.value[row][col];
   if (selected.value) {
     const legal = possible.value.includes(`${row}:${col}`);
     if (legal) {
-      const moving = board.value[selected.value[0]][selected.value[1]];
+      const from = selected.value.slice();
+      const moving = board.value[from[0]][from[1]];
       if (piece?.type === "king") winner.value = moving.color;
-      board.value[row][col] = moving; board.value[selected.value[0]][selected.value[1]] = null;
+      lastMove.value = { from, to: [row, col], capture: Boolean(piece), token: moveToken.value + 1 };
+      moveToken.value += 1;
+      board.value[row][col] = moving; board.value[from[0]][from[1]] = null;
       if (moving.type === "pawn" && (row === 0 || row === 7)) moving.type = "queen";
       turn.value = moving.color === "white" ? "black" : "white"; selected.value = null; return;
     }
@@ -62,8 +67,8 @@ function clickCell(row, col) {
   <div class="game-panel">
     <div class="score-row"><div class="score-box"><strong>{{ winner || turn }}</strong><span>{{ winner ? "勝者" : "輪到" }}</span></div></div>
     <div class="chess-board">
-      <button v-for="(piece, index) in board.flat()" :key="index" class="chess-cell" :class="{ dark: (Math.floor(index / 8) + index) % 2, selected: selected?.[0] === Math.floor(index / 8) && selected?.[1] === index % 8, move: possible.includes(`${Math.floor(index / 8)}:${index % 8}`) }" @click="clickCell(Math.floor(index / 8), index % 8)">
-        {{ piece ? symbols[piece.color][piece.type] : "" }}
+      <button v-for="(piece, index) in board.flat()" :key="index" class="chess-cell" :class="{ dark: (Math.floor(index / 8) + index) % 2, selected: selected?.[0] === Math.floor(index / 8) && selected?.[1] === index % 8, move: possible.includes(`${Math.floor(index / 8)}:${index % 8}`), 'chess-cell--from': lastMove?.from?.[0] === Math.floor(index / 8) && lastMove?.from?.[1] === index % 8, 'chess-cell--to': lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8, 'chess-cell--capture': lastMove?.capture && lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 }" @click="clickCell(Math.floor(index / 8), index % 8)">
+        <span v-if="piece" class="chess-piece" :class="{ 'chess-piece--arrive': lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 }" :key="`${piece.color}-${piece.type}-${lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 ? lastMove.token : 0}`">{{ symbols[piece.color][piece.type] }}</span>
       </button>
     </div>
     <div class="game-actions"><button class="button button--primary" @click="reset">重新開始</button></div>

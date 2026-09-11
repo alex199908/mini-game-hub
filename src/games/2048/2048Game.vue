@@ -13,6 +13,8 @@ function loadGame() {
 }
 
 const game = ref(loadGame());
+const movePulse = ref(0);
+const invalidPulse = ref(0);
 const board = computed(() => game.value.board.flat());
 const statusText = computed(() => {
   if (game.value.status === "won") return "已達成 2048";
@@ -21,9 +23,17 @@ const statusText = computed(() => {
 });
 
 function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(game.value)); }
-function restart() { game.value = createGame(game.value.best); }
-function handleMove(direction) { game.value = move(game.value, direction); }
-function handleUndo() { game.value = undo(game.value); }
+function restart() { game.value = createGame(game.value.best); movePulse.value += 1; }
+function handleMove(direction) {
+  const next = move(game.value, direction);
+  if (next === game.value) { invalidPulse.value += 1; return; }
+  game.value = next;
+  movePulse.value += 1;
+}
+function handleUndo() {
+  const next = undo(game.value);
+  if (next !== game.value) { game.value = next; movePulse.value += 1; }
+}
 
 function onKeydown(event) {
   const directions = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
@@ -61,8 +71,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       <div class="score-box"><strong>{{ statusText }}</strong><span>狀態</span></div>
     </div>
 
-    <div class="board-2048" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
-      <div v-for="(value, index) in board" :key="index" class="tile-2048" :data-value="value">{{ value || "" }}</div>
+    <div :key="movePulse" class="board-2048 board-2048--move" :class="{ 'board-2048--shake': invalidPulse % 2 }" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+      <div v-for="(value, index) in board" :key="`${index}-${movePulse}-${value}`" class="tile-2048" :class="{ 'tile-2048--pop': value, 'tile-2048--win': value === 2048 }" :data-value="value">{{ value || "" }}</div>
     </div>
 
     <div class="d-pad" aria-label="2048 directional controls">

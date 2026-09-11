@@ -16,6 +16,7 @@ const solution = computed(() => solutions[puzzleIndex.value].split("").map(Numbe
 const board = ref([...puzzle.value]);
 const selected = ref(-1);
 const mistakes = ref(0);
+const feedback = ref({ index: -1, type: "", token: 0 });
 const complete = computed(() => board.value.every((value, index) => value === solution.value[index]));
 
 function newPuzzle() {
@@ -23,17 +24,23 @@ function newPuzzle() {
   board.value = [...puzzle.value];
   selected.value = -1;
   mistakes.value = 0;
+  feedback.value = { index: -1, type: "", token: feedback.value.token + 1 };
 }
+
+function mark(index, type) { feedback.value = { index, type, token: feedback.value.token + 1 }; }
 
 function enter(value) {
   if (selected.value < 0 || puzzle.value[selected.value] !== 0 || complete.value) return;
   board.value[selected.value] = value;
-  if (value && value !== solution.value[selected.value]) mistakes.value += 1;
+  const isWrong = value && value !== solution.value[selected.value];
+  if (isWrong) mistakes.value += 1;
+  mark(selected.value, value === 0 ? "clear" : isWrong ? "wrong" : "correct");
 }
 
 function hint() {
   if (selected.value < 0 || puzzle.value[selected.value] !== 0) return;
   board.value[selected.value] = solution.value[selected.value];
+  mark(selected.value, "hint");
 }
 </script>
 
@@ -43,8 +50,8 @@ function hint() {
       <div class="score-box"><strong>{{ mistakes }}</strong><span>錯誤</span></div>
       <div class="score-box"><strong>{{ complete ? "完成" : "進行中" }}</strong><span>狀態</span></div>
     </div>
-    <div class="sudoku-board">
-      <button v-for="(value, index) in board" :key="index" class="sudoku-cell" :class="{ fixed: puzzle[index], selected: selected === index, wrong: value && !puzzle[index] && value !== solution[index] }" @click="selected = index">
+    <div class="sudoku-board" :class="{ 'sudoku-board--complete': complete }">
+      <button v-for="(value, index) in board" :key="`${index}-${feedback.index === index ? feedback.token : 0}`" class="sudoku-cell" :class="{ fixed: puzzle[index], selected: selected === index, wrong: value && !puzzle[index] && value !== solution[index], 'sudoku-cell--correct': feedback.index === index && feedback.type === 'correct', 'sudoku-cell--wrong': feedback.index === index && feedback.type === 'wrong', 'sudoku-cell--hint': feedback.index === index && feedback.type === 'hint' }" @click="selected = index">
         {{ value || "" }}
       </button>
     </div>

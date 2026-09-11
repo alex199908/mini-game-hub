@@ -43,8 +43,8 @@ function clickCell(row, col) {
 <template>
   <div class="game-panel">
     <div class="score-row"><div class="score-box"><strong>{{ status }}</strong><span>狀態</span></div></div>
-    <div class="connect-board">
-      <button v-for="index in 25" :key="index" class="connect-cell" :class="{ endpoint: endpoint(Math.floor((index - 1) / 5), (index - 1) % 5), path: owner(Math.floor((index - 1) / 5), (index - 1) % 5) }" :style="{ '--c': colors[endpoint(Math.floor((index - 1) / 5), (index - 1) % 5)?.color || owner(Math.floor((index - 1) / 5), (index - 1) % 5)] }" @click="clickCell(Math.floor((index - 1) / 5), (index - 1) % 5)" />
+    <div class="connect-board" :class="{ 'connect-board--complete': complete.length === pairs.length }">
+      <button v-for="index in 25" :key="index" class="connect-cell" :class="{ endpoint: endpoint(Math.floor((index - 1) / 5), (index - 1) % 5), path: owner(Math.floor((index - 1) / 5), (index - 1) % 5), 'connect-cell--active': active === (endpoint(Math.floor((index - 1) / 5), (index - 1) % 5)?.color || owner(Math.floor((index - 1) / 5), (index - 1) % 5)), 'connect-cell--done': complete.includes(endpoint(Math.floor((index - 1) / 5), (index - 1) % 5)?.color) }" :style="{ '--c': colors[endpoint(Math.floor((index - 1) / 5), (index - 1) % 5)?.color || owner(Math.floor((index - 1) / 5), (index - 1) % 5)] }" @click="clickCell(Math.floor((index - 1) / 5), (index - 1) % 5)" />
     </div>
     <div class="game-actions"><button class="button button--primary" @click="reset">重置</button></div>
     <p class="game-hint">點端點，再點相鄰格子建立路徑，最後點同色終點。路徑不能穿過其他顏色。</p>
