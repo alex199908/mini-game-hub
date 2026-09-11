@@ -1,7 +1,14 @@
-const CACHE_NAME = "mini-game-hub-runtime-v1";
+const CACHE_NAME = "mini-game-hub-runtime-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => event.waitUntil(
+  Promise.all([
+    self.clients.claim(),
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith("mini-game-hub-runtime-") && key !== CACHE_NAME).map((key) => caches.delete(key))
+    ))
+  ])
+));
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
