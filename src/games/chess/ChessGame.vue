@@ -47,7 +47,10 @@ const status = computed(() => {
   if (game.value.inCheck()) return `${turn}被將軍`;
   return `${turn}行棋`;
 });
-const tone = computed(() => game.value.isGameOver() ? (game.value.isCheckmate() ? "danger" : "neutral") : game.value.inCheck() ? "danger" : "active");
+const tone = computed(() => {
+  version.value;
+  return game.value.isGameOver() ? (game.value.isCheckmate() ? "danger" : "neutral") : game.value.inCheck() ? "danger" : "active";
+});
 const stats = computed(() => [
   { label: "回合", value: game.value.turn() === "w" ? "白" : "黑" },
   { label: "手數", value: history.value.length },
