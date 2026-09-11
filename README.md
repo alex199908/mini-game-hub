@@ -1,44 +1,28 @@
-# Pocket Arcade MVP
+# Mini Game Hub
 
-八款純前端單機小遊戲：
+一套以 Vue 3 + Vite + Pinia 建立的單機網頁小遊戲合集。
 
-- 2048
-- Sudoku
-- Color Connect
-- Water Sort
-- Multi Color Fill
-- Sand Tetris
-- Chess
-- 大老二
+## 遊戲規劃
 
-## 執行
+2048、Sudoku、Color Connect、Water Sort、Multi Color Fill、Sand Tetris、Chess、大老二。
 
-最簡單：
+## 本地開發
 
 ```bash
-python -m http.server 8080
+npm install
+npm run dev
 ```
 
-然後開啟：
+生產建置與預覽：
 
-```text
-http://localhost:8080
+```bash
+npm run build
+npm run preview
 ```
 
-不要直接雙擊 `index.html` 測 PWA/service worker，瀏覽器安全限制會擋，這不是網站在鬧，是瀏覽器很愛管。
+## 架構原則
 
-## 狀態
-
-這是一版「玩法 + UI + 共用殼」MVP。
-
-Chess：
-- 有基本合法走法
-- 有 check / checkmate / stalemate 判定
-- 有升變為 Queen
-- 尚未做 castling / en passant
-
-大老二：
-- 1v3 CPU
-- 單張 / Pair / Triple / 五張牌型
-- 首手含 ♣3
-- MVP 順子規則尚未加入 A2345 特例
+- 每款遊戲的規則引擎與 Vue UI 分離。
+- 遊戲狀態以 `localStorage` 保存，第一版不依賴後端。
+- 先完成可玩的核心迴圈，再補關卡、AI、動畫與 PWA 離線快取。
+- 目前第一個完整模組是 2048，其餘遊戲先以明確的模組插槽接入。
