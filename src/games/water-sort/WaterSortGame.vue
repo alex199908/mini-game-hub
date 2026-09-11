@@ -60,7 +60,8 @@ function targetAt(x, y, source) {
   return element ? Number(element.dataset.tubeIndex) : -1;
 }
 function pointerDown(index, event) {
-  if (complete.value || !tubes.value[index].length) return;
+  if (complete.value) return;
+  if (!tubes.value[index].length) { if (selected.value >= 0) tapTube(index); return; }
   drag.value = { active: true, source: index, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dx: 0, dy: 0 };
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
