@@ -1,60 +1,71 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import GameChrome from "../../components/GameChrome.vue";
 import { createGame, move, undo } from "./engine";
 
 const STORAGE_KEY = "mini-game-hub-2048";
+const SWIPE_THRESHOLD = 42;
 
 function loadGame() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || createGame();
-  } catch {
-    return createGame();
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || createGame(); }
+  catch { return createGame(); }
 }
 
 const game = ref(loadGame());
-const movePulse = ref(0);
+const changed = ref(new Set());
 const invalidPulse = ref(0);
+const drag = ref({ active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0 });
 const board = computed(() => game.value.board.flat());
-const statusText = computed(() => {
-  if (game.value.status === "won") return "已達成 2048";
-  if (game.value.status === "lost") return "沒有可走步數";
-  return "進行中";
-});
+const statusText = computed(() => game.value.status === "won" ? "2048 達成" : game.value.status === "lost" ? "無路可走" : "滑動棋盤");
+const statusTone = computed(() => game.value.status === "won" ? "success" : game.value.status === "lost" ? "danger" : "active");
+const stats = computed(() => [
+  { label: "分數", value: game.value.score },
+  { label: "最高", value: game.value.best },
+  { label: "UNDO", value: game.value.history.length }
+]);
+const dragStyle = computed(() => ({
+  "--drag-x": `${drag.value.dx * .12}px`,
+  "--drag-y": `${drag.value.dy * .12}px`,
+  "--swipe-power": `${Math.min(100, Math.max(Math.abs(drag.value.dx), Math.abs(drag.value.dy)) / SWIPE_THRESHOLD * 100)}%`
+}));
 
 function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(game.value)); }
-function restart() { game.value = createGame(game.value.best); movePulse.value += 1; }
+function restart() { game.value = createGame(game.value.best); changed.value = new Set(); }
 function handleMove(direction) {
+  const before = game.value.board.flat();
   const next = move(game.value, direction);
-  if (next === game.value) { invalidPulse.value += 1; return; }
+  if (next === game.value) { invalidPulse.value += 1; return false; }
   game.value = next;
-  movePulse.value += 1;
+  const after = next.board.flat();
+  changed.value = new Set(after.map((value, index) => value !== before[index] ? index : -1).filter((index) => index >= 0));
+  return true;
 }
 function handleUndo() {
   const next = undo(game.value);
-  if (next !== game.value) { game.value = next; movePulse.value += 1; }
+  if (next !== game.value) { game.value = next; changed.value = new Set(board.value.map((_, index) => index)); }
 }
-
 function onKeydown(event) {
   const directions = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
   if (!directions[event.key]) return;
   event.preventDefault();
   handleMove(directions[event.key]);
 }
-
-const touchStart = ref(null);
-function onTouchStart(event) {
-  const point = event.changedTouches[0];
-  touchStart.value = { x: point.clientX, y: point.clientY };
+function pointerDown(event) {
+  if (game.value.status === "lost") return;
+  drag.value = { active: true, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dx: 0, dy: 0 };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
 }
-
-function onTouchEnd(event) {
-  if (!touchStart.value) return;
-  const point = event.changedTouches[0];
-  const dx = point.clientX - touchStart.value.x;
-  const dy = point.clientY - touchStart.value.y;
-  touchStart.value = null;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+function pointerMove(event) {
+  if (!drag.value.active || drag.value.pointerId !== event.pointerId) return;
+  drag.value.dx = event.clientX - drag.value.startX;
+  drag.value.dy = event.clientY - drag.value.startY;
+}
+function finishPointer(event, cancelled = false) {
+  if (!drag.value.active || drag.value.pointerId !== event.pointerId) return;
+  const { dx, dy } = drag.value;
+  try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+  drag.value = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+  if (cancelled || Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
   handleMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
 }
 
@@ -64,30 +75,34 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <div class="game-panel">
-    <div class="score-row">
-      <div class="score-box"><strong>{{ game.score }}</strong><span>分數</span></div>
-      <div class="score-box"><strong>{{ game.best }}</strong><span>最高分</span></div>
-      <div class="score-box"><strong>{{ statusText }}</strong><span>狀態</span></div>
+  <GameChrome :status="statusText" :tone="statusTone" :stats="stats">
+    <div
+      class="board-2048 interactive-board"
+      :class="[{ 'is-dragging': drag.active, 'board-2048--shake': invalidPulse % 2 }]"
+      :style="dragStyle"
+      @pointerdown="pointerDown"
+      @pointermove="pointerMove"
+      @pointerup="finishPointer"
+      @pointercancel="(event) => finishPointer(event, true)"
+    >
+      <div
+        v-for="(value, index) in board"
+        :key="index"
+        class="tile-2048"
+        :class="{ 'is-changed': changed.has(index), 'tile-2048--win': value === 2048 }"
+        :data-value="value"
+      >{{ value || "" }}</div>
+      <div class="swipe-meter" aria-hidden="true"><span /></div>
     </div>
 
-    <div :key="movePulse" class="board-2048 board-2048--move" :class="{ 'board-2048--shake': invalidPulse % 2 }" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
-      <div v-for="(value, index) in board" :key="`${index}-${movePulse}-${value}`" class="tile-2048" :class="{ 'tile-2048--pop': value, 'tile-2048--win': value === 2048 }" :data-value="value">{{ value || "" }}</div>
-    </div>
-
-    <div class="d-pad" aria-label="2048 directional controls">
-      <span />
-      <button class="button button--subtle" @click="handleMove('up')">↑</button>
-      <span />
-      <button class="button button--subtle" @click="handleMove('left')">←</button>
-      <button class="button button--subtle" @click="handleMove('down')">↓</button>
-      <button class="button button--subtle" @click="handleMove('right')">→</button>
-    </div>
-
-    <div class="game-actions">
+    <template #primary>
       <button class="button button--subtle" :disabled="!game.history.length" @click="handleUndo">Undo</button>
       <button class="button button--primary" @click="restart">重新開始</button>
-    </div>
-    <p class="game-hint">桌面按方向鍵，手機直接滑動棋盤。遊戲進度會自動保存在這台裝置。</p>
-  </div>
+    </template>
+    <template #secondary>
+      <span class="interaction-chip">手機：直接滑動</span>
+      <span class="interaction-chip"><kbd>←↑↓→</kbd> 鍵盤</span>
+    </template>
+    <template #hint>拖曳途中棋盤會跟手，超過門檻才送出移動；無效方向會直接回彈，不再塞一組反人類方向鍵。</template>
+  </GameChrome>
 </template>
