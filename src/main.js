@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import "./styles.css";
 import "./interaction.css";
+import "./interaction-fixes.css";
 
 createApp(App).use(createPinia()).mount("#app");
 
