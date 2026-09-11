@@ -6,11 +6,20 @@ import GameShell from "./components/GameShell.vue";
 import { games } from "./data/games";
 import { useAppStore } from "./stores/app";
 import Game2048 from "./games/2048/2048Game.vue";
+import SudokuGame from "./games/sudoku/SudokuGame.vue";
+import ColorConnectGame from "./games/color-connect/ColorConnectGame.vue";
+import WaterSortGame from "./games/water-sort/WaterSortGame.vue";
+import MultiColorFillGame from "./games/multi-color-fill/MultiColorFillGame.vue";
+import SandTetrisGame from "./games/sand-tetris/SandTetrisGame.vue";
+import ChessGame from "./games/chess/ChessGame.vue";
+import BigTwoGame from "./games/big-two/BigTwoGame.vue";
 
 const app = useAppStore();
 const activeId = ref(null);
 const activeGame = computed(() => games.find((game) => game.id === activeId.value));
 const playableCount = computed(() => games.filter((game) => game.status === "ready").length);
+const gameComponents = { "2048": Game2048, sudoku: SudokuGame, "color-connect": ColorConnectGame, "water-sort": WaterSortGame, "multi-color-fill": MultiColorFillGame, "sand-tetris": SandTetrisGame, chess: ChessGame, "big-two": BigTwoGame };
+const activeComponent = computed(() => activeGame.value ? gameComponents[activeGame.value.id] : null);
 function selectGame(game) { activeId.value = game.id; }
 function goHome() { activeId.value = null; }
 </script>
@@ -50,7 +59,7 @@ function goHome() { activeId.value = null; }
 
     <GameShell v-else :eyebrow="`${activeGame.category} / ${String(games.indexOf(activeGame) + 1).padStart(2, '0')}`" :title="activeGame.title" :subtitle="activeGame.description" @back="goHome">
       <template #actions><span v-if="activeGame.status === 'ready'" class="live-badge">LIVE</span></template>
-      <Game2048 v-if="activeGame.id === '2048'" />
+      <component :is="activeComponent" v-if="activeComponent" />
       <ComingSoon v-else :game="activeGame" />
     </GameShell>
   </div>
