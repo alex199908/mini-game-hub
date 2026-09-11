@@ -1,77 +1,182 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
+import { Chess } from "chess.js";
+import GameChrome from "../../components/GameChrome.vue";
 
-const symbols = { white: { king: "♔", queen: "♕", rook: "♖", bishop: "♗", knight: "♘", pawn: "♙" }, black: { king: "♚", queen: "♛", rook: "♜", bishop: "♝", knight: "♞", pawn: "♟" } };
-const board = ref(makeBoard());
-const turn = ref("white");
+const symbols = {
+  w: { k: "♔", q: "♕", r: "♖", b: "♗", n: "♘", p: "♙" },
+  b: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" }
+};
+const files = "abcdefgh";
+const game = shallowRef(new Chess());
+const version = ref(0);
 const selected = ref(null);
-const winner = ref(null);
-const lastMove = ref(null);
-const moveToken = ref(0);
+const pendingPromotion = ref(null);
+const suppressClick = ref(false);
+const drag = ref({ active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, symbol: "" });
 
-function makeBoard() {
-  const next = Array.from({ length: 8 }, () => Array(8).fill(null));
-  const back = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];
-  back.forEach((type, col) => { next[0][col] = { type, color: "black" }; next[7][col] = { type, color: "white" }; });
-  for (let col = 0; col < 8; col += 1) { next[1][col] = { type: "pawn", color: "black" }; next[6][col] = { type: "pawn", color: "white" }; }
-  return next;
-}
+const boardCells = computed(() => {
+  version.value;
+  return game.value.board().flatMap((row, rowIndex) => row.map((piece, colIndex) => ({
+    piece,
+    row: rowIndex,
+    col: colIndex,
+    square: `${files[colIndex]}${8 - rowIndex}`
+  })));
+});
+const history = computed(() => { version.value; return game.value.history({ verbose: true }); });
+const lastMove = computed(() => history.value.at(-1) || null);
+const legalMoves = computed(() => {
+  version.value;
+  if (!selected.value || game.value.isGameOver()) return [];
+  return game.value.moves({ square: selected.value, verbose: true });
+});
+const legalBySquare = computed(() => new Map(legalMoves.value.map((move) => [move.to, move])));
+const checkSquare = computed(() => {
+  version.value;
+  if (!game.value.inCheck()) return null;
+  const color = game.value.turn();
+  return boardCells.value.find((cell) => cell.piece?.type === "k" && cell.piece?.color === color)?.square || null;
+});
+const status = computed(() => {
+  version.value;
+  const turn = game.value.turn() === "w" ? "白方" : "黑方";
+  if (game.value.isCheckmate()) return `${turn}被將死`;
+  if (game.value.isStalemate()) return "逼和";
+  if (game.value.isDraw()) return "和棋";
+  if (game.value.inCheck()) return `${turn}被將軍`;
+  return `${turn}行棋`;
+});
+const tone = computed(() => game.value.isGameOver() ? (game.value.isCheckmate() ? "danger" : "neutral") : game.value.inCheck() ? "danger" : "active");
+const stats = computed(() => [
+  { label: "回合", value: game.value.turn() === "w" ? "白" : "黑" },
+  { label: "手數", value: history.value.length },
+  { label: "狀態", value: game.value.inCheck() ? "CHECK" : "LIVE" }
+]);
 
-function inBounds(row, col) { return row >= 0 && row < 8 && col >= 0 && col < 8; }
-function clearPath(from, to) {
-  const rowStep = Math.sign(to[0] - from[0]); const colStep = Math.sign(to[1] - from[1]);
-  let row = from[0] + rowStep; let col = from[1] + colStep;
-  while (row !== to[0] || col !== to[1]) { if (board.value[row][col]) return false; row += rowStep; col += colStep; }
-  return true;
+function reset() {
+  game.value = new Chess();
+  version.value += 1;
+  selected.value = null;
+  pendingPromotion.value = null;
 }
-function movesFrom(from) {
-  const piece = board.value[from[0]][from[1]]; if (!piece) return [];
-  const result = []; const add = (row, col) => { if (!inBounds(row, col)) return false; const target = board.value[row][col]; if (!target || target.color !== piece.color) result.push([row, col]); return !target; };
-  if (piece.type === "pawn") {
-    const direction = piece.color === "white" ? -1 : 1; const start = piece.color === "white" ? 6 : 1;
-    if (inBounds(from[0] + direction, from[1]) && !board.value[from[0] + direction][from[1]]) { result.push([from[0] + direction, from[1]]); if (from[0] === start && !board.value[from[0] + direction * 2][from[1]]) result.push([from[0] + direction * 2, from[1]]); }
-    [-1, 1].forEach((offset) => { const row = from[0] + direction; const col = from[1] + offset; if (inBounds(row, col) && board.value[row][col]?.color !== piece.color && board.value[row][col]) result.push([row, col]); });
-    return result;
+function undo() {
+  if (!game.value.undo()) return;
+  version.value += 1;
+  selected.value = null;
+  pendingPromotion.value = null;
+}
+function commitMove(from, to, promotion) {
+  try {
+    const move = game.value.move({ from, to, ...(promotion ? { promotion } : {}) });
+    if (!move) return false;
+    version.value += 1;
+    selected.value = null;
+    pendingPromotion.value = null;
+    return true;
+  } catch { return false; }
+}
+function requestMove(from, to) {
+  const candidates = game.value.moves({ square: from, verbose: true }).filter((move) => move.to === to);
+  if (!candidates.length) return false;
+  const promotions = [...new Set(candidates.map((move) => move.promotion).filter(Boolean))];
+  if (promotions.length) {
+    pendingPromotion.value = { from, to, options: promotions, color: game.value.turn() };
+    return true;
   }
-  if (piece.type === "knight") [[1,2],[1,-2],[-1,2],[-1,-2],[2,1],[2,-1],[-2,1],[-2,-1]].forEach(([row, col]) => add(from[0] + row, from[1] + col));
-  if (piece.type === "king") for (let row = -1; row <= 1; row += 1) for (let col = -1; col <= 1; col += 1) if (row || col) add(from[0] + row, from[1] + col);
-  const diagonal = piece.type === "bishop" || piece.type === "queen"; const straight = piece.type === "rook" || piece.type === "queen"; const rays = [];
-  if (diagonal) rays.push([1,1],[1,-1],[-1,1],[-1,-1]); if (straight) rays.push([1,0],[-1,0],[0,1],[0,-1]);
-  rays.forEach(([rowStep, colStep]) => { let row = from[0] + rowStep; let col = from[1] + colStep; while (inBounds(row, col)) { const canContinue = add(row, col); if (!canContinue) break; row += rowStep; col += colStep; } });
-  return result.filter((to) => piece.type === "knight" || piece.type === "king" || piece.type === "pawn" || clearPath(from, to));
+  return commitMove(from, to);
 }
-
-const possible = computed(() => selected.value ? movesFrom(selected.value).map(([row, col]) => `${row}:${col}`) : []);
-function reset() { board.value = makeBoard(); turn.value = "white"; selected.value = null; winner.value = null; lastMove.value = null; moveToken.value += 1; }
-function clickCell(row, col) {
-  if (winner.value) return;
-  const piece = board.value[row][col];
-  if (selected.value) {
-    const legal = possible.value.includes(`${row}:${col}`);
-    if (legal) {
-      const from = selected.value.slice();
-      const moving = board.value[from[0]][from[1]];
-      if (piece?.type === "king") winner.value = moving.color;
-      lastMove.value = { from, to: [row, col], capture: Boolean(piece), token: moveToken.value + 1 };
-      moveToken.value += 1;
-      board.value[row][col] = moving; board.value[from[0]][from[1]] = null;
-      if (moving.type === "pawn" && (row === 0 || row === 7)) moving.type = "queen";
-      turn.value = moving.color === "white" ? "black" : "white"; selected.value = null; return;
-    }
+function clickSquare(cell) {
+  if (suppressClick.value || game.value.isGameOver() || pendingPromotion.value) return;
+  if (selected.value && legalBySquare.value.has(cell.square)) { requestMove(selected.value, cell.square); return; }
+  if (cell.piece?.color === game.value.turn()) selected.value = selected.value === cell.square ? null : cell.square;
+  else selected.value = null;
+}
+function pointerDown(cell, event) {
+  if (game.value.isGameOver() || pendingPromotion.value || cell.piece?.color !== game.value.turn()) return;
+  selected.value = cell.square;
+  drag.value = {
+    active: true,
+    pointerId: event.pointerId,
+    from: cell.square,
+    x: event.clientX,
+    y: event.clientY,
+    startX: event.clientX,
+    startY: event.clientY,
+    symbol: symbols[cell.piece.color][cell.piece.type]
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+function pointerMove(event) {
+  if (!drag.value.active || drag.value.pointerId !== event.pointerId) return;
+  drag.value.x = event.clientX;
+  drag.value.y = event.clientY;
+}
+function targetSquareAt(x, y) {
+  return document.elementsFromPoint(x, y).find((element) => element?.dataset?.square)?.dataset?.square || null;
+}
+function pointerUp(event) {
+  if (!drag.value.active || drag.value.pointerId !== event.pointerId) return;
+  const distance = Math.hypot(event.clientX - drag.value.startX, event.clientY - drag.value.startY);
+  const from = drag.value.from;
+  const target = targetSquareAt(event.clientX, event.clientY);
+  try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+  drag.value = { active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, symbol: "" };
+  if (distance > 8) {
+    suppressClick.value = true;
+    if (target && target !== from) requestMove(from, target);
+    window.setTimeout(() => { suppressClick.value = false; }, 0);
   }
-  selected.value = piece?.color === turn.value ? [row, col] : null;
 }
 </script>
 
 <template>
-  <div class="game-panel">
-    <div class="score-row"><div class="score-box"><strong>{{ winner || turn }}</strong><span>{{ winner ? "勝者" : "輪到" }}</span></div></div>
-    <div class="chess-board">
-      <button v-for="(piece, index) in board.flat()" :key="index" class="chess-cell" :class="{ dark: (Math.floor(index / 8) + index) % 2, selected: selected?.[0] === Math.floor(index / 8) && selected?.[1] === index % 8, move: possible.includes(`${Math.floor(index / 8)}:${index % 8}`), 'chess-cell--from': lastMove?.from?.[0] === Math.floor(index / 8) && lastMove?.from?.[1] === index % 8, 'chess-cell--to': lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8, 'chess-cell--capture': lastMove?.capture && lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 }" @click="clickCell(Math.floor(index / 8), index % 8)">
-        <span v-if="piece" class="chess-piece" :class="{ 'chess-piece--arrive': lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 }" :key="`${piece.color}-${piece.type}-${lastMove?.to?.[0] === Math.floor(index / 8) && lastMove?.to?.[1] === index % 8 ? lastMove.token : 0}`">{{ symbols[piece.color][piece.type] }}</span>
-      </button>
+  <GameChrome :status="status" :tone="tone" :stats="stats">
+    <div class="chess-layout">
+      <div class="chess-board interactive-chess">
+        <button
+          v-for="cell in boardCells"
+          :key="cell.square"
+          class="chess-cell"
+          :data-square="cell.square"
+          :class="{
+            dark: (cell.row + cell.col) % 2,
+            selected: selected === cell.square,
+            'is-legal': legalBySquare.has(cell.square) && !legalBySquare.get(cell.square)?.captured,
+            'is-capture': Boolean(legalBySquare.get(cell.square)?.captured),
+            'is-check': checkSquare === cell.square,
+            'chess-cell--from': lastMove?.from === cell.square,
+            'chess-cell--to': lastMove?.to === cell.square
+          }"
+          @click="clickSquare(cell)"
+          @pointerdown="pointerDown(cell, $event)"
+          @pointermove="pointerMove"
+          @pointerup="pointerUp"
+          @pointercancel="pointerUp"
+        >
+          <span v-if="cell.piece" class="chess-piece">{{ symbols[cell.piece.color][cell.piece.type] }}</span>
+        </button>
+      </div>
+
+      <aside class="chess-rail">
+        <strong>棋譜</strong>
+        <div class="chess-rail__moves">
+          <div v-for="(move, index) in history" :key="`${index}-${move.san}`" class="chess-move"><span>{{ index + 1 }}</span><strong>{{ move.san }}</strong></div>
+          <span v-if="!history.length" class="muted">尚未走子</span>
+        </div>
+      </aside>
+
+      <div v-if="pendingPromotion" class="promotion-picker">
+        <button v-for="piece in pendingPromotion.options" :key="piece" class="button" @click="commitMove(pendingPromotion.from, pendingPromotion.to, piece)">{{ symbols[pendingPromotion.color][piece] }}</button>
+      </div>
+      <div v-if="drag.active" class="chess-drag-ghost" :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">{{ drag.symbol }}</div>
     </div>
-    <div class="game-actions"><button class="button button--primary" @click="reset">重新開始</button></div>
-    <p class="game-hint">目前是本機雙人 first-pass：基本走法、吃子、升變；將軍、王車易位與吃過路兵下一階段補。</p>
-  </div>
+
+    <template #primary>
+      <button class="button button--subtle" :disabled="!history.length" @click="undo">悔棋</button>
+      <button class="button button--primary" @click="reset">重新開局</button>
+    </template>
+    <template #secondary><span class="interaction-chip">拖曳棋子</span><span class="interaction-chip">支援王車易位 / 吃過路兵 / 升變</span></template>
+    <template #hint>規則改由 chess.js 驗證。拖起棋子就會顯示合法落點，吃子、將軍、將死、和棋與升變都走正式棋規，不再靠「把王吃掉就贏」這種邪教規則。</template>
+  </GameChrome>
 </template>
