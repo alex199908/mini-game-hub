@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#121418" />
+  <title>Pocket Arcade</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <button id="homeBtn" class="icon-btn" aria-label="首頁">⌂</button>
+      <div>
+        <div class="eyebrow">OFFLINE MINI GAMES</div>
+        <h1 id="pageTitle">Pocket Arcade</h1>
+      </div>
+      <button id="themeBtn" class="icon-btn" aria-label="切換主題">◐</button>
+    </header>
+
+    <main id="main"></main>
+  </div>
+
+  <template id="homeTemplate">
+    <section class="hero">
+      <div>
+        <span class="pill">8 games · local only</span>
+        <h2>一包就好，別把小遊戲做成 SaaS。</h2>
+        <p>純前端、可離線、手機可玩。進度與最佳成績只存這台裝置。</p>
+      </div>
+      <div class="hero-mark">PA</div>
+    </section>
+    <section class="game-grid" id="gameGrid"></section>
+  </template>
+
+  <script src="./app.js"></script>
+  <script>if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));</script>
+</body>
+</html>
