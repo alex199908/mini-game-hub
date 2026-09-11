@@ -1,0 +1,9 @@
+{
+  "name": "Pocket Arcade",
+  "short_name": "Arcade",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101216",
+  "theme_color": "#101216",
+  "description": "一套離線可玩的單機網頁小遊戲。"
+}
