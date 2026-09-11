@@ -1,0 +1,5 @@
+/* Final interaction overrides after board-level QA. */
+button { min-height: 0; }
+.button, .icon-button { min-height: var(--ui-hit); }
+.board-2048.interactive-board { position: relative; }
+.chess-cell, .sudoku-cell, .connect-cell, .tube, .card, .palette-dot { min-height: 0; }
