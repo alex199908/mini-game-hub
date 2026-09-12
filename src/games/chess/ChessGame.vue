@@ -3,17 +3,20 @@ import { computed, ref, shallowRef } from "vue";
 import { Chess } from "chess.js";
 import GameChrome from "../../components/GameChrome.vue";
 
-const symbols = {
-  w: { k: "♔", q: "♕", r: "♖", b: "♗", n: "♘", p: "♙" },
-  b: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" }
-};
+const pieceNames = { k: "king", q: "queen", r: "rook", b: "bishop", n: "knight", p: "pawn" };
 const files = "abcdefgh";
 const game = shallowRef(new Chess());
 const version = ref(0);
 const selected = ref(null);
 const pendingPromotion = ref(null);
 const suppressClick = ref(false);
-const drag = ref({ active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, symbol: "" });
+const drag = ref({ active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, src: "" });
+
+function pieceAsset(piece) {
+  if (!piece) return "";
+  const color = piece.color === "w" ? "white" : "black";
+  return `${import.meta.env.BASE_URL}chess/pieces/${color}-${pieceNames[piece.type]}.svg`;
+}
 
 const boardCells = computed(() => {
   version.value;
@@ -106,7 +109,7 @@ function pointerDown(cell, event) {
     y: event.clientY,
     startX: event.clientX,
     startY: event.clientY,
-    symbol: symbols[cell.piece.color][cell.piece.type]
+    src: pieceAsset(cell.piece)
   };
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
@@ -124,7 +127,7 @@ function pointerUp(event) {
   const from = drag.value.from;
   const target = targetSquareAt(event.clientX, event.clientY);
   try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
-  drag.value = { active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, symbol: "" };
+  drag.value = { active: false, pointerId: null, from: null, x: 0, y: 0, startX: 0, startY: 0, src: "" };
   if (distance > 8) {
     suppressClick.value = true;
     if (target && target !== from) requestMove(from, target);
@@ -157,7 +160,7 @@ function pointerUp(event) {
           @pointerup="pointerUp"
           @pointercancel="pointerUp"
         >
-          <span v-if="cell.piece" class="chess-piece">{{ symbols[cell.piece.color][cell.piece.type] }}</span>
+          <img v-if="cell.piece" class="chess-piece" :src="pieceAsset(cell.piece)" alt="" draggable="false" />
         </button>
       </div>
 
@@ -170,16 +173,21 @@ function pointerUp(event) {
       </aside>
 
       <div v-if="pendingPromotion" class="promotion-picker">
-        <button v-for="piece in pendingPromotion.options" :key="piece" class="button" @click="commitMove(pendingPromotion.from, pendingPromotion.to, piece)">{{ symbols[pendingPromotion.color][piece] }}</button>
+        <button v-for="piece in pendingPromotion.options" :key="piece" class="button" @click="commitMove(pendingPromotion.from, pendingPromotion.to, piece)">
+          <img class="promotion-piece" :src="pieceAsset({ color: pendingPromotion.color, type: piece })" alt="" draggable="false" />
+        </button>
       </div>
-      <div v-if="drag.active" class="chess-drag-ghost" :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">{{ drag.symbol }}</div>
+      <img v-if="drag.active" class="chess-drag-ghost" :src="drag.src" alt="" draggable="false" :style="{ left: `${drag.x}px`, top: `${drag.y}px` }" />
     </div>
 
     <template #primary>
       <button class="button button--subtle" :disabled="!history.length" @click="undo">悔棋</button>
       <button class="button button--primary" @click="reset">重新開局</button>
     </template>
-    <template #secondary><span class="interaction-chip">拖曳棋子</span><span class="interaction-chip">支援王車易位 / 吃過路兵 / 升變</span></template>
-    <template #hint>規則改由 chess.js 驗證。拖起棋子就會顯示合法落點，吃子、將軍、將死、和棋與升變都走正式棋規，不再靠「把王吃掉就贏」這種邪教規則。</template>
+    <template #secondary><span class="interaction-chip">拖曳棋子</span><span class="interaction-chip">王車易位 · 吃過路兵 · 升變</span></template>
+    <template #hint>
+      拖曳或點選棋子到合法落點，規則由 chess.js 驗證。
+      <a class="asset-credit" href="https://www.vecteezy.com/" target="_blank" rel="noopener noreferrer">棋子素材：Vecteezy</a>
+    </template>
   </GameChrome>
 </template>
