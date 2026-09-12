@@ -3,3 +3,40 @@ button { min-height: 0; }
 .button, .icon-button { min-height: var(--ui-hit); }
 .board-2048.interactive-board { position: relative; }
 .chess-cell, .sudoku-cell, .connect-cell, .tube, .card, .palette-dot { min-height: 0; }
+
+/* Chess pieces are SVG assets, not Unicode glyphs. Keep them identical across iOS/Android/desktop. */
+.chess-piece {
+  display: block;
+  width: 86%;
+  height: 86%;
+  margin: auto;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, .12));
+}
+.chess-drag-ghost {
+  width: clamp(48px, 11vw, 72px);
+  height: clamp(48px, 11vw, 72px);
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.promotion-picker .promotion-piece {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.asset-credit {
+  margin-left: .45em;
+  color: inherit;
+  font-size: 10px;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+  opacity: .68;
+}
+.asset-credit:hover { opacity: 1; }
